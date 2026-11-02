@@ -95,7 +95,15 @@ enum CloudIcon {
             let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             let fill: NSColor = red ? .systemRed : (dark ? .white : NSColor(calibratedWhite: 0.17, alpha: 1))
             fill.withAlphaComponent(available ? 1 : 0.45).setFill()
-            NSBezierPath(ovalIn: NSRect(x: 1, y: 1, width: 22, height: 22)).fill()
+            // Six overlapping rounded lobes keep a compact, nearly circular cloud silhouette.
+            let cloud = NSBezierPath(ovalIn: NSRect(x: 4, y: 4, width: 16, height: 16))
+            for lobe in 0..<6 {
+                let angle = Double(lobe) * .pi / 3 + .pi / 6
+                let x = 12 + 6 * cos(angle)
+                let y = 12 + 6 * sin(angle)
+                cloud.appendOval(in: NSRect(x: x - 4.5, y: y - 4.5, width: 9, height: 9))
+            }
+            cloud.fill()
             let ink: NSColor = red || !dark ? .white : .black
             let fontSize: CGFloat = value.count >= 4 ? 7.5 : 9
             let text = NSAttributedString(string: value, attributes: [
