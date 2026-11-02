@@ -30,7 +30,7 @@ final class Monitor: NSObject, ObservableObject, @preconcurrency CBCentralManage
     }
     var onChange: (() -> Void)?
     private var pendingSensors: [String: Sensor] = [:]
-    private var lastPublished = Date.distantPast
+    private var publicationCadence = PublicationCadence()
     private var lastDiagnostic = Date.distantPast
     private var central: CBCentralManager!
     private var timer: Timer?
@@ -42,11 +42,19 @@ final class Monitor: NSObject, ObservableObject, @preconcurrency CBCentralManage
         zones = UserDefaults.standard.data(forKey: "zones").flatMap { try? JSONDecoder().decode([Metric: RedZone].self, from: $0) } ?? [:]
         super.init()
         central = CBCentralManager(delegate: self, queue: .main)
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.now = Date(); self?.publishPendingIfDue(); self?.onChange?() }
         }
+        if let timer { RunLoop.main.add(timer, forMode: .common) }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.rescan() }
+            Task { @MainActor in
+                guard let self else { return }
+                self.now = Date()
+                self.publicationCadence.reset()
+                self.pendingSensors = self.sensors
+                self.rescan()
+                self.onChange?()
+            }
         }
     }
     var sensor: Sensor? { sensors[selectedID] }
@@ -71,7 +79,12 @@ final class Monitor: NSObject, ObservableObject, @preconcurrency CBCentralManage
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         poweredOn = central.state == .poweredOn
         switch central.state {
-        case .poweredOn: status = "Поиск датчика…"; rescan()
+        case .poweredOn:
+            status = "Поиск датчика…"
+            now = Date()
+            publicationCadence.reset()
+            pendingSensors = sensors
+            rescan()
         case .poweredOff: status = "Bluetooth выключен"
         case .unauthorized: status = "Разрешите Bluetooth в настройках macOS"
         case .unsupported: status = "Bluetooth недоступен"
@@ -89,13 +102,7 @@ final class Monitor: NSObject, ObservableObject, @preconcurrency CBCentralManage
         }
         sensor.lastSeen = time; sensor.rssi = RSSI.intValue
         pendingSensors[sensor.id] = sensor
-        if sensors[sensor.id] == nil {
-            sensors[sensor.id] = sensor
-            if selectedID.isEmpty { selectedID = sensor.id }
-            lastPublished = time
-            now = time
-            onChange?()
-        }
+        publishPendingIfDue(at: time)
         if CommandLine.arguments.contains("--diagnostics"), time.timeIntervalSince(lastDiagnostic) >= 10 {
             let values = Metric.allCases.compactMap { metric -> String? in
                 guard let value = metric.value(in: reading) else { return nil }
@@ -106,9 +113,20 @@ final class Monitor: NSObject, ObservableObject, @preconcurrency CBCentralManage
             lastDiagnostic = time
         }
     }
-    private func publishPendingIfDue() {
-        guard now.timeIntervalSince(lastPublished) >= 60 else { return }
-        sensors = pendingSensors
-        lastPublished = now
+    private func publishPendingIfDue(at time: Date? = nil) {
+        let time = time ?? now
+        var changed = false
+        for (id, pending) in pendingSensors {
+            // Never advance the publication clock by re-emitting an unchanged cached reading.
+            guard sensors[id].map({ pending.lastSeen > $0.lastSeen }) ?? true,
+                  publicationCadence.shouldPublish(deviceID: id, at: time) else { continue }
+            sensors[id] = pending
+            if selectedID.isEmpty { selectedID = id }
+            changed = true
+        }
+        if changed {
+            now = time
+            onChange?()
+        }
     }
 }

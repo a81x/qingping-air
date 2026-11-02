@@ -10,13 +10,12 @@ struct Panel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
-                Image(systemName: "cloud.fill").font(.title2).foregroundStyle(.indigo)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Qingping Air").font(.headline)
+                    Text("Qingping Air").font(.system(size: 14, weight: .medium)).foregroundStyle(.secondary)
                     Text(monitor.connectionText).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button { settings.toggle() } label: { Image(systemName: settings ? "xmark" : "gearshape") }
+                Button { settings.toggle() } label: { Image(systemName: settings ? "xmark" : "ellipsis") }
                     .buttonStyle(.borderless).help("Настройки")
             }
             if settings { settingsView }
@@ -31,13 +30,13 @@ struct Panel: View {
                         let sample = monitor.fresh(metric)
                         let red = monitor.alerts.contains(metric)
                         HStack {
-                            Text(metric.label).foregroundStyle(.secondary)
+                            Text(metric.label).font(.system(size: 14)).foregroundStyle(.primary)
                             Spacer()
                             Text(sample.map { metric.format($0.value) } ?? "—")
-                                .font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit()
+                                .font(.system(size: 18, weight: .regular)).monospacedDigit()
                                 .foregroundStyle(red ? alertColor : Color.primary)
                             Text(metric.unit).font(.caption).foregroundStyle(.secondary).frame(width: 49, alignment: .leading)
-                        }.padding(.vertical, 7)
+                        }.padding(.vertical, 9)
                         if metric != .humidity { Divider() }
                     }
                 }
@@ -52,7 +51,8 @@ struct Panel: View {
                 Spacer()
                 Button("Выход") { NSApp.terminate(nil) }.buttonStyle(.borderless).font(.caption)
             }
-        }.padding(18).frame(width: 350)
+        }.padding(22).frame(width: 350)
+        .font(.system(size: 13))
         .onChange(of: settings) { _, value in onSettingsChange(value) }
     }
     var settingsView: some View {

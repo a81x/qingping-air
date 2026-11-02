@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let monitor = Monitor()
     var item: NSStatusItem!
     let panel = AirPanel(contentRect: NSRect(x: 0, y: 0, width: 350, height: 420),
-                        styleMask: [.borderless], backing: .buffered, defer: false)
+                        styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     private var outsideClickMonitor: Any?
     private var localEventMonitor: Any?
     private var panelHeight: CGFloat = 420
@@ -23,30 +23,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.target = self
         item.button?.action = #selector(toggle)
+        item.button?.sendAction(on: .leftMouseUp)
         panel.level = .popUpMenu
         panel.hasShadow = true
+        panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.transient, .moveToActiveSpace, .fullScreenAuxiliary]
-        panel.backgroundColor = .windowBackgroundColor
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.appearance = NSAppearance(named: .darkAqua)
         panel.contentViewController = NSHostingController(rootView:
             ScrollView { Panel(monitor: monitor, onSettingsChange: { [weak self] settings in
                 self?.panelHeight = settings ? 570 : 420
                 self?.positionPanel()
-            }) }.frame(width: 350)
+            }) }
+                .frame(width: 350)
+                .frame(maxHeight: .infinity)
+                .background(RoundedRectangle(cornerRadius: 18).fill(Color(red: 44 / 255, green: 44 / 255, blue: 44 / 255)))
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Color.white.opacity(0.13), lineWidth: 1))
+                .preferredColorScheme(.dark)
         )
         panel.contentView?.wantsLayer = true
-        panel.contentView?.layer?.cornerRadius = 12
+        panel.contentView?.layer?.cornerRadius = 18
         panel.contentView?.layer?.masksToBounds = true
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            Task { @MainActor in self?.panel.orderOut(nil) }
+            // AppKit invokes event monitors on the main thread. Handle this event now:
+            // queuing it can close a panel opened by the same status-item click.
+            MainActor.assumeIsolated { self?.dismissForOutsideClick(at: NSEvent.mouseLocation) }
         }
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
             let consumed = MainActor.assumeIsolated {
                 guard let self, self.panel.isVisible else { return false }
                 if event.type == .keyDown {
-                    if event.keyCode == 53 { self.panel.orderOut(nil); return true }
+                    if event.keyCode == 53 { self.panel.orderOut(nil); self.panelLog("closed: escape"); return true }
                 } else if event.window !== self.panel, event.window !== self.item.button?.window {
-                    self.panel.orderOut(nil)
+                    let location = event.window.map { $0.convertPoint(toScreen: event.locationInWindow) } ?? NSEvent.mouseLocation
+                    self.dismissForOutsideClick(at: location)
                 }
                 return false
             }
@@ -55,23 +68,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.onChange = { [weak self] in self?.refresh() }
         refresh()
     }
-    func applicationDidResignActive(_ notification: Notification) { panel.orderOut(nil) }
+    func applicationWillTerminate(_ notification: Notification) {
+        if let outsideClickMonitor { NSEvent.removeMonitor(outsideClickMonitor) }
+        if let localEventMonitor { NSEvent.removeMonitor(localEventMonitor) }
+    }
+    private var anchorRect: NSRect? {
+        guard let button = item?.button, let window = button.window else { return nil }
+        return window.convertToScreen(button.convert(button.bounds, to: nil))
+    }
+    private func dismissForOutsideClick(at point: NSPoint) {
+        guard let anchor = anchorRect else { return }
+        if PanelBehavior.shouldDismissForClick(point: point, panel: panel.frame, anchor: anchor, isPresented: panel.isVisible) {
+            panel.orderOut(nil)
+            panelLog("closed: outside click")
+        }
+    }
+    private func panelLog(_ message: String) {
+        guard CommandLine.arguments.contains("--diagnostics") else { return }
+        print("Panel: \(message)")
+        fflush(stdout)
+    }
     func positionPanel() {
         guard let button = item.button, let window = button.window else { return }
         let anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
         let screen = window.screen ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return }
-        let height = min(panelHeight, visible.height - 12)
-        let x = max(visible.minX + 6, min(anchor.midX - 175, visible.maxX - 356))
-        let y = max(visible.minY + 6, min(anchor.minY - height - 5, visible.maxY - height - 5))
-        panel.setFrame(NSRect(x: x, y: y, width: 350, height: height), display: true)
+        panel.setFrame(PanelBehavior.frame(anchor: anchor, visible: visible, desiredHeight: panelHeight), display: true)
     }
     @objc func toggle() {
-        if panel.isVisible { panel.orderOut(nil) }
+        if panel.isVisible { panel.orderOut(nil); panelLog("closed: status item") }
         else {
             positionPanel()
-            NSApp.activate(ignoringOtherApps: true)
             panel.makeKeyAndOrderFront(nil)
+            panelLog("opened: visible=\(panel.isVisible), key=\(panel.isKeyWindow), frame=\(panel.frame)")
         }
     }
     func refresh() {
