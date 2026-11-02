@@ -5,6 +5,7 @@ import AirCore
 struct Panel: View {
     @ObservedObject var monitor: Monitor
     var onSettingsChange: (Bool) -> Void = { _ in }
+    private let alertColor = Color(red: 0.78, green: 0.36, blue: 0.29)
     @State private var settings = false
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -22,7 +23,7 @@ struct Panel: View {
             else {
                 if !monitor.alerts.isEmpty {
                     Label("Красная зона: " + monitor.alerts.map(\.label).joined(separator: ", "), systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(.red)
+                        .font(.caption).foregroundStyle(alertColor)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 VStack(spacing: 2) {
@@ -34,7 +35,7 @@ struct Panel: View {
                             Spacer()
                             Text(sample.map { metric.format($0.value) } ?? "—")
                                 .font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit()
-                                .foregroundStyle(red ? Color.red : Color.primary)
+                                .foregroundStyle(red ? alertColor : Color.primary)
                             Text(metric.unit).font(.caption).foregroundStyle(.secondary).frame(width: 49, alignment: .leading)
                         }.padding(.vertical, 7)
                         if metric != .humidity { Divider() }

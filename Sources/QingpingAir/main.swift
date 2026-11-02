@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        item = NSStatusBar.system.statusItem(withLength: 28)
+        item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.target = self
         item.button?.action = #selector(toggle)
         panel.level = .popUpMenu
@@ -80,41 +80,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sample = monitor.fresh(metric)
         let value = sample.map { metric.format($0.value) } ?? "—"
         let red = !monitor.alerts.isEmpty
-        button.image = CloudIcon.image(value: value, label: metric.shortLabel, red: red, available: sample != nil, appearance: button.effectiveAppearance)
+        button.image = nil
+        let normalColor: NSColor = sample == nil ? .secondaryLabelColor : .white
+        let color = red ? NSColor(calibratedRed: 0.78, green: 0.36, blue: 0.29, alpha: 1) : normalColor
+        button.attributedTitle = NSAttributedString(string: value, attributes: [
+            .font: NSFont.menuBarFont(ofSize: 0),
+            .foregroundColor: color
+        ])
         button.toolTip = "\(metric.label): \(value) \(metric.unit)\n\(monitor.connectionText)"
         button.setAccessibilityLabel("Qingping Air. \(metric.label): \(value) \(metric.unit). \(red ? "Красная зона." : "") \(monitor.connectionText)")
-    }
-}
-
-@MainActor
-enum CloudIcon {
-    static func image(value: String, label: String, red: Bool, available: Bool, appearance: NSAppearance) -> NSImage {
-        let image = NSImage(size: NSSize(width: 24, height: 24))
-        appearance.performAsCurrentDrawingAppearance {
-            image.lockFocus()
-            let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            let fill: NSColor = red ? .systemRed : (dark ? .white : NSColor(calibratedWhite: 0.17, alpha: 1))
-            fill.withAlphaComponent(available ? 1 : 0.45).setFill()
-            // Six overlapping rounded lobes keep a compact, nearly circular cloud silhouette.
-            let cloud = NSBezierPath(ovalIn: NSRect(x: 4, y: 4, width: 16, height: 16))
-            for lobe in 0..<6 {
-                let angle = Double(lobe) * .pi / 3 + .pi / 6
-                let x = 12 + 6 * cos(angle)
-                let y = 12 + 6 * sin(angle)
-                cloud.appendOval(in: NSRect(x: x - 4.5, y: y - 4.5, width: 9, height: 9))
-            }
-            cloud.fill()
-            let ink: NSColor = red || !dark ? .white : .black
-            let fontSize: CGFloat = value.count >= 4 ? 7.5 : 9
-            let text = NSAttributedString(string: value, attributes: [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .bold),
-                .foregroundColor: ink
-            ])
-            text.draw(at: NSPoint(x: (24 - text.size().width) / 2, y: (24 - text.size().height) / 2))
-            image.unlockFocus()
-        }
-        image.isTemplate = false
-        return image
     }
 }
 
