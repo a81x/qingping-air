@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<rect width="512" height="512" rx="112" fill="#f4f4fb"/>
+<path fill="#34365f" d="M125 374C28 374 24 239 103 226C115 119 242 105 293 179C374 127 446 191 437 248C515 274 478 374 420 374Z"/>
+<text x="267" y="255" text-anchor="middle" fill="white" font-family="Helvetica,Arial,sans-serif" font-size="30" font-weight="600">CO₂</text>
+<text x="267" y="329" text-anchor="middle" fill="white" font-family="Helvetica,Arial,sans-serif" font-size="78" font-weight="700">750</text>
+</svg>
