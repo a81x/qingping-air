@@ -40,7 +40,7 @@ public struct RedZone: Codable, Equatable, Sendable {
     }
     public static func defaultZone(for metric: Metric) -> RedZone {
         switch metric {
-        case .co2: RedZone(upper: 2000)
+        case .co2: RedZone(upper: 900)
         case .pm25: RedZone(upper: 75)
         case .pm10: RedZone(upper: 150)
         case .temperature: RedZone(lower: 16, upper: 30)
@@ -53,7 +53,7 @@ public struct Sample: Sendable {
     public let value: Double
     public let date: Date
     public init(value: Double, date: Date) { self.value = value; self.date = date }
-    public func isFresh(at now: Date) -> Bool { now.timeIntervalSince(date) < 60 }
+    public func isFresh(at now: Date) -> Bool { now.timeIntervalSince(date) < 120 }
 }
 
 public enum DisplayPolicy {

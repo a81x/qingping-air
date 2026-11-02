@@ -28,11 +28,13 @@ var samples: [Metric: Sample] = [.co2: Sample(value: 2100, date: now), .humidity
 expect(DisplayPolicy.displayed(selected: .humidity, samples: samples, zones: [:], now: now) == .co2, "red overrides selection")
 samples[.co2] = Sample(value: 700, date: now)
 expect(DisplayPolicy.displayed(selected: .humidity, samples: samples, zones: [:], now: now) == .humidity, "recovery restores selection")
-samples[.co2] = Sample(value: 3000, date: now.addingTimeInterval(-60))
+samples[.co2] = Sample(value: 3000, date: now.addingTimeInterval(-120))
 expect(DisplayPolicy.alerts(samples: samples, zones: [:], now: now).isEmpty, "stale values cannot trigger alerts")
-samples = [.co2: Sample(value: 2000, date: now), .pm25: Sample(value: 100, date: now)]
+samples = [.co2: Sample(value: 900, date: now), .pm25: Sample(value: 100, date: now)]
 expect(DisplayPolicy.alerts(samples: samples, zones: [:], now: now) == [.co2, .pm25], "stable multiple-alert priority and inclusive boundary")
 samples = [.temperature: Sample(value: 15, date: now), .co2: Sample(value: 1000, date: now)]
 expect(DisplayPolicy.alerts(samples: samples, zones: [.co2: RedZone(upper: 1000)], now: now) == [.co2, .temperature], "custom and lower thresholds")
 expect(!RedZone(lower: 20, upper: 70).contains(45), "in-range value")
+expect(!RedZone.defaultZone(for: .co2).contains(899), "CO2 below 900 is normal")
+expect(RedZone.defaultZone(for: .co2).contains(900), "CO2 red starts at 900")
 print("Passed \(checks) checks")

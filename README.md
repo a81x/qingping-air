@@ -12,7 +12,8 @@ A small native macOS menu bar app for **Qingping Air Monitor Lite (CGDN1)**. Rea
 - With multiple alerts, stable priority: CO₂ → PM2.5 → PM10 → temperature → humidity. The panel lists every active alert.
 - Closes on outside click, Escape or a second click on the menu bar icon; the panel is positioned below the icon and kept on-screen.
 - Click the number for all five readings, connection status, device selection and editable thresholds.
-- Values older than 60 seconds are unavailable and cannot trigger alerts. Missing values display a dash.
+- Values older than 120 seconds are unavailable and cannot trigger alerts. Missing values display a dash.
+- Publishes readings once per minute; the first reading for a newly discovered sensor appears immediately. Bluetooth reception continues passively; device settings are not changed. Red-zone checks use these displayed readings.
 - Remembers your metric, thresholds and sensor locally. Resumes scanning after wake.
 - Russian interface. Native SwiftUI/AppKit/CoreBluetooth; no third-party dependencies.
 
@@ -37,7 +38,7 @@ These are **editable application defaults**, not a claim that every firmware or 
 
 | Metric | Red when |
 | --- | --- |
-| CO₂ | ≥ 2000 ppm |
+| CO₂ | ≥ 900 ppm |
 | PM2.5 | ≥ 75 µg/m³ |
 | PM10 | ≥ 150 µg/m³ |
 | Temperature | ≤ 16 or ≥ 30 °C |

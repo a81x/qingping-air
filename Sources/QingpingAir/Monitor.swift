@@ -29,6 +29,8 @@ final class Monitor: NSObject, ObservableObject, @preconcurrency CBCentralManage
         }
     }
     var onChange: (() -> Void)?
+    private var pendingSensors: [String: Sensor] = [:]
+    private var lastPublished = Date.distantPast
     private var lastDiagnostic = Date.distantPast
     private var central: CBCentralManager!
     private var timer: Timer?
@@ -41,7 +43,7 @@ final class Monitor: NSObject, ObservableObject, @preconcurrency CBCentralManage
         super.init()
         central = CBCentralManager(delegate: self, queue: .main)
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.now = Date(); self?.onChange?() }
+            Task { @MainActor in self?.now = Date(); self?.publishPendingIfDue(); self?.onChange?() }
         }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.rescan() }
@@ -59,7 +61,7 @@ final class Monitor: NSObject, ObservableObject, @preconcurrency CBCentralManage
         guard poweredOn else { return status }
         guard let sensor else { return "Поиск датчика поблизости…" }
         let age = max(0, Int(now.timeIntervalSince(sensor.lastSeen)))
-        return age < 60 ? "Bluetooth · обновлено \(age) с назад" : "Нет сигнала · \(age) с без данных"
+        return age < 120 ? "Bluetooth · обновлено \(age) с назад" : "Нет сигнала · \(age) с без данных"
     }
     func rescan() {
         guard central.state == .poweredOn else { return }
@@ -81,14 +83,19 @@ final class Monitor: NSObject, ObservableObject, @preconcurrency CBCentralManage
         guard let services = advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data],
               let data = services[CBUUID(string: "FDCD")], let reading = Advertisement.decode(data) else { return }
         let time = Date()
-        var sensor = sensors[reading.deviceID] ?? Sensor(id: reading.deviceID, lastSeen: time, rssi: RSSI.intValue)
+        var sensor = pendingSensors[reading.deviceID] ?? Sensor(id: reading.deviceID, lastSeen: time, rssi: RSSI.intValue)
         for metric in Metric.allCases {
             if let value = metric.value(in: reading) { sensor.samples[metric] = Sample(value: value, date: time) }
         }
         sensor.lastSeen = time; sensor.rssi = RSSI.intValue
-        sensors[sensor.id] = sensor
-        if selectedID.isEmpty { selectedID = sensor.id }
-        now = time
+        pendingSensors[sensor.id] = sensor
+        if sensors[sensor.id] == nil {
+            sensors[sensor.id] = sensor
+            if selectedID.isEmpty { selectedID = sensor.id }
+            lastPublished = time
+            now = time
+            onChange?()
+        }
         if CommandLine.arguments.contains("--diagnostics"), time.timeIntervalSince(lastDiagnostic) >= 10 {
             let values = Metric.allCases.compactMap { metric -> String? in
                 guard let value = metric.value(in: reading) else { return nil }
@@ -98,6 +105,10 @@ final class Monitor: NSObject, ObservableObject, @preconcurrency CBCentralManage
             fflush(stdout)
             lastDiagnostic = time
         }
-        onChange?()
+    }
+    private func publishPendingIfDue() {
+        guard now.timeIntervalSince(lastPublished) >= 60 else { return }
+        sensors = pendingSensors
+        lastPublished = now
     }
 }
